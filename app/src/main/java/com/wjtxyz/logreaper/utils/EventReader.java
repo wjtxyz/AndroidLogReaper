@@ -1,4 +1,4 @@
-package com.wjtxyz.utils;
+package com.wjtxyz.logreaper.utils;
 
 import android.util.EventLog;
 

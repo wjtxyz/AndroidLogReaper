@@ -1,4 +1,4 @@
-package com.wjtxyz;
+package com.wjtxyz.logreaper;
 
 import android.app.Service;
 import android.content.Intent;
@@ -7,7 +7,7 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.util.EventLog;
 
-import com.wjtxyz.utils.ProviderLog;
+import com.wjtxyz.logreaper.utils.ProviderLog;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -48,16 +48,16 @@ public class LogClientService extends Service {
     }
 
     final Runnable mSocketLogWriterProc = new Runnable() {
-        SocketChannel client;
+        SocketChannel socketChannel;
 
         @Override
         public void run() {
             try {
                 // !!!this MUST NOT execute in MainThread/UIThread
-                if (client == null) {
-                    client = SocketChannel.open(new InetSocketAddress("localhost", 8099));
+                if (socketChannel == null) {
+                    socketChannel = SocketChannel.open(new InetSocketAddress("localhost", 8099));
                 }
-                client.write(ByteBuffer.wrap("SocketLog writer test\n".getBytes(StandardCharsets.UTF_8)));
+                socketChannel.write(ByteBuffer.wrap("SocketLog writer test\n".getBytes(StandardCharsets.UTF_8)));
             } catch (IOException ex) {
                 ex.printStackTrace();
             }
@@ -78,6 +78,8 @@ public class LogClientService extends Service {
         @Override
         public void run() {
             //this can execute in any thread
+
+            //make sure this number(666666) same as the EventLog server definition
             EventLog.writeEvent(666666, "EventLogLog writer test");
             mBackgroundHandler.postDelayed(this, 1000);
         }

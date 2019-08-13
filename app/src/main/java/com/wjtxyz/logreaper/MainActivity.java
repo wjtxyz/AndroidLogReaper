@@ -1,4 +1,4 @@
-package com.wjtxyz;
+package com.wjtxyz.logreaper;
 
 import android.app.Service;
 import android.content.ComponentName;
@@ -20,7 +20,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.util.EventLog;
 import android.util.Log;
 
-import com.wjtxyz.utils.EventReader;
+import com.wjtxyz.logreaper.utils.EventReader;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
@@ -46,8 +46,8 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        new Thread(mLogServerSocketProc, "SocketLog").start();
-        new Thread(mEventLogProc, "EventLogLog").start();
+        new Thread(mSocketLogProc, "SocketLog").start();
+        new Thread(mEventLogLogProc, "EventLogLog").start();
         bindService(new Intent(this, LogClientService.class), mServiceConnection, Service.BIND_AUTO_CREATE);
     }
 
@@ -69,36 +69,41 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    final Runnable mLogServerSocketProc = new Runnable() {
+    final Runnable mSocketLogProc = new Runnable() {
         @Override
         public void run() {
             try (Selector selector = Selector.open(); ServerSocketChannel serverSocketChannel = ServerSocketChannel.open()) {
                 serverSocketChannel.bind(new InetSocketAddress("localhost", 8099));
                 serverSocketChannel.configureBlocking(false);
-                int ops = serverSocketChannel.validOps();
+                final int ops = serverSocketChannel.validOps();
                 serverSocketChannel.register(selector, ops, null);
                 final ByteBuffer byteBuffer = ByteBuffer.allocate(8 * 1024);
                 for (; ; ) {
-                    int noOfKeys = selector.select();
-                    Set<SelectionKey> selectedKeys = selector.selectedKeys();
+                    selector.select();
+                    final Set<SelectionKey> selectedKeys = selector.selectedKeys();
                     final Iterator<SelectionKey> itr = selectedKeys.iterator();
                     while (itr.hasNext()) {
-                        final SelectionKey ky = itr.next();
-                        if (ky.isAcceptable()) {
+                        final SelectionKey key = itr.next();
+                        if (key.isAcceptable()) {
                             // The new client connection is accepted
                             SocketChannel client = serverSocketChannel.accept();
                             client.configureBlocking(false);
                             // The new connection is added to a selector
                             client.register(selector, SelectionKey.OP_READ);
-                        } else if (ky.isReadable()) {
-                            // Data is read from the client
-                            final int readLen = ((SocketChannel) ky.channel()).read(byteBuffer);
+                        } else if (key.isReadable()) {
+                            // Data is read from the client or the client disconnect
                             byteBuffer.position(0);
-                            String readLineData;
-
-                            final BufferedReader reader = new BufferedReader(new InputStreamReader(new ByteBufferBackedInputStream((ByteBuffer) byteBuffer.duplicate().limit(readLen)), StandardCharsets.UTF_8));
-                            while ((readLineData = reader.readLine()) != null) {
-                                Log.d(TAG, "SocketLog received: readLineData=" + readLineData);
+                            final int readLen = ((SocketChannel) key.channel()).read(byteBuffer);
+                            byteBuffer.position(0);
+                            if (readLen == -1) {
+                                key.channel().close(); //client disconnect
+                                key.cancel();
+                            } else {
+                                String readLineData;
+                                final BufferedReader reader = new BufferedReader(new InputStreamReader(new ByteBufferBackedInputStream((ByteBuffer) byteBuffer.duplicate().limit(readLen)), StandardCharsets.UTF_8));
+                                while ((readLineData = reader.readLine()) != null) {
+                                    Log.d(TAG, "SocketLog received: readLineData=" + readLineData);
+                                }
                             }
                         }
                         itr.remove();
@@ -111,16 +116,19 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    final Runnable mEventLogProc = new Runnable() {
+    final Runnable mEventLogLogProc = new Runnable() {
         @Override
         public void run() {
             try {
-                Process process = Runtime.getRuntime().exec("/system/bin/logcat -B -b events [666666]:v *:s");
+
+                // the number(666666) is for test, you can choose other numbers
+                // option "-B" : switch the dump mode to binary
+                final Process process = Runtime.getRuntime().exec("/system/bin/logcat -B -b events [666666]:v *:s");
                 try (BufferedInputStream inputStream = new BufferedInputStream(process.getInputStream(), 64 * 1024)) {
                     while (true) {
-                        EventLog.Event event = EventReader.readEvent(inputStream);
-                        if(event.getTag() == 666666){
-                            Log.d(TAG, "EventLogLog received: pid=" + event.getProcessId() + " threadId=" + event.getThreadId() + " tag=" + event.getTag() + " object=" + event.getData());
+                        final EventLog.Event event = EventReader.readEvent(inputStream);
+                        if (event.getTag() == 666666) {
+                            Log.d(TAG, "EventLogLog received: object=" + event.getData());
                         }
                     }
                 }

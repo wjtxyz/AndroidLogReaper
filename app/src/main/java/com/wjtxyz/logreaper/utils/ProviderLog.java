@@ -1,4 +1,4 @@
-package com.wjtxyz.utils;
+package com.wjtxyz.logreaper.utils;
 
 import android.annotation.SuppressLint;
 import android.app.Application;
@@ -19,8 +19,8 @@ public class ProviderLog {
     private static OutputStream outputStream;
     private static final Uri CONTENT_URI = Uri.parse("content://com.wjtxyz.logprovider/log");
 
-    private static void ensureOpen(boolean force) throws IOException, RemoteException {
-        if (!force && outputStream != null) {
+    private static void ensureOpen(boolean forceReopen) throws IOException, RemoteException {
+        if (!forceReopen && outputStream != null) {
             return;
         }
         if (outputStream != null) {
